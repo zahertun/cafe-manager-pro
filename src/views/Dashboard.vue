@@ -11,8 +11,9 @@
             <i :class="currentUser.role === 'admin' ? 'fa-solid fa-user-shield text-amber-400' : 'fa-solid fa-user text-amber-200'"></i>
             <span class="font-semibold">{{ currentUser.name }}</span>
             <span class="text-[9px] uppercase bg-amber-400 text-coffee-900 px-1.5 py-0.2 rounded font-black">{{ currentUser.role }}</span>
-            <button @click="switchRole" class="text-amber-300 ml-1 hover:scale-110 transition" title="Changer d'utilisateur / rôle">
-                <i class="fa-solid fa-right-left"></i>
+            <button @click="handleLogout" class="text-red-400 ml-2 hover:scale-110 transition bg-coffee-900/50 px-2 py-1 rounded-lg flex items-center" title="Déconnexion">
+                <i class="fa-solid fa-right-from-bracket mr-1"></i>
+                <span class="text-[10px] font-bold">Quitter</span>
             </button>
         </div>
     </header>
@@ -305,12 +306,17 @@
                 </div>
             </div>
 
-            <!-- SECTION B : GESTION DES UTILISATEURS (ADMIN / BARISTA) -->
             <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                 <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
                     <h3 class="text-xs font-black text-gray-600 uppercase tracking-wider flex items-center">
                         <i class="fa-solid fa-user-gear text-coffee-600 mr-2 text-sm"></i> Équipe & Rôles
                     </h3>
+                    <button 
+                        @click="handleLogout"
+                        class="bg-red-600 text-white px-2.5 py-1 rounded-lg text-xs font-black hover:bg-red-500 active:scale-95 transition flex items-center space-x-1 shadow-sm mr-2">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                        <span>Déconnexion</span>
+                    </button>
                     <button 
                         v-if="currentUser.role === 'admin'"
                         @click="showAddUserModal = true"
@@ -789,9 +795,12 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { supabase } from '../supabase';
 import { createClient } from '@supabase/supabase-js';
+
+const router = useRouter();
 
 // App State
         const activeTab = ref('pos'); // pos, sales, stock, customers, settings
@@ -805,17 +814,59 @@ import { createClient } from '@supabase/supabase-js';
             autoPrint: true
         });
 
-        // Mock Users
-        const userList = ref([
-            { id: 'u1', name: 'Sofiene', role: 'barista' },
-            { id: 'u2', name: 'Mona (Gérante)', role: 'admin' },
-            { id: 'u3', name: 'Ahmed Caisse', role: 'barista' }
-        ]);
-        const currentUser = ref(userList.value[1]); // Default to admin to see settings
-        const switchRole = () => {
-            const currentIndex = userList.value.findIndex(u => u.id === currentUser.value.id);
-            const nextIndex = (currentIndex + 1) % userList.value.length;
-            currentUser.value = userList.value[nextIndex];
+        // Real Users Data
+        const userList = ref([]);
+        const currentUser = ref({ id: '', name: 'Chargement...', role: 'barista' });
+        
+        onMounted(async () => {
+             const { data: { session } } = await supabase.auth.getSession();
+             if(!session) {
+                 router.push('/login');
+                 return;
+             }
+             const userId = session.user.id;
+             
+             // Check if Admin
+             const { data: cafeAdmin } = await supabase.from('cafes').select('*').eq('admin_id', userId).single();
+             if (cafeAdmin) {
+                 currentUser.value = { id: userId, name: 'Gérant (Admin)', role: 'admin' };
+                 userList.value = [{ id: userId, name: 'Moi (Gérant)', role: 'admin' }];
+                 
+                 // Fetch baristas
+                 const { data: baristas } = await supabase.from('barista_accounts').select('*').eq('cafe_id', cafeAdmin.id);
+                 if (baristas) {
+                     baristas.forEach(b => userList.value.push({ id: b.id, name: b.name, role: 'barista' }));
+                 }
+             } else {
+                 // It's a barista or a broken admin
+                 const isProbablyAdmin = session.user.email && !session.user.email.endsWith('@barista.local');
+                 
+                 if (isProbablyAdmin) {
+                     // Try to auto-repair missing cafe entry for admin
+                     const { error: insertErr } = await supabase.from('cafes').insert({
+                         admin_id: userId,
+                         name: 'Mon Café'
+                     });
+                     if (!insertErr) {
+                         window.location.reload();
+                         return;
+                     }
+                 }
+
+                 const usernameFromEmail = session.user.email.split('@')[0];
+                 const { data: baristaAccount } = await supabase.from('barista_accounts').select('name, cafe_id').eq('username', usernameFromEmail).single();
+                 if (baristaAccount) {
+                     currentUser.value = { id: userId, name: baristaAccount.name, role: 'barista' };
+                 } else {
+                     currentUser.value = { id: userId, name: isProbablyAdmin ? 'Gérant (Réparation)' : 'Barista Anonyme', role: 'barista' };
+                 }
+                 userList.value = [currentUser.value];
+             }
+        });
+
+        const handleLogout = async () => {
+            await supabase.auth.signOut();
+            router.push('/login');
         };
 
         // Users Administration
@@ -894,9 +945,14 @@ import { createClient } from '@supabase/supabase-js';
                 alert("Erreur lors de la création : " + error.message);
             }
         };
-        const deleteUser = (id) => {
+        const deleteUser = async (id) => {
             if (confirm('Voulez-vous vraiment supprimer cet utilisateur ?')) {
-                userList.value = userList.value.filter(u => u.id !== id);
+                const { error } = await supabase.from('barista_accounts').delete().eq('id', id);
+                if (error) {
+                    alert("Erreur lors de la suppression : " + error.message);
+                } else {
+                    userList.value = userList.value.filter(u => u.id !== id);
+                }
             }
         };
 
