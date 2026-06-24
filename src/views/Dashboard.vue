@@ -832,14 +832,26 @@ import { createClient } from '@supabase/supabase-js';
                 const { data: { session } } = await supabase.auth.getSession();
                 if (!session) throw new Error("Non connecté");
                 
-                const { data: cafeData } = await supabase
+                let { data: cafeData } = await supabase
                     .from('cafes')
                     .select('id')
                     .eq('admin_id', session.user.id)
                     .single();
                 
-                const cafeId = cafeData?.id;
-                if (!cafeId) throw new Error("Café introuvable pour cet admin");
+                let cafeId = cafeData?.id;
+                
+                // --- AUTO-RÉPARATION ---
+                // Si la création du café a échoué lors de l'inscription à cause d'une ancienne erreur RLS, on le recrée ici.
+                if (!cafeId) {
+                    const { data: newCafe, error: newCafeErr } = await supabase
+                        .from('cafes')
+                        .insert({ admin_id: session.user.id, name: 'Mon Café' })
+                        .select('id')
+                        .single();
+                        
+                    if (newCafeErr) throw new Error("Impossible de lier ou créer le café : " + newCafeErr.message);
+                    cafeId = newCafe.id;
+                }
 
                 // 2. Créer l'utilisateur dans Supabase Auth (Sans déconnecter l'admin)
                 // On utilise un second client avec persistSession: false
