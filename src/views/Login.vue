@@ -14,6 +14,11 @@
         </div>
 
         <form @submit.prevent="handleLogin" class="space-y-4">
+          <div v-if="loginMode === 'admin' && isSignUp">
+            <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Nom de l'établissement</label>
+            <input v-model="cafeName" type="text" :required="isSignUp" placeholder="Mon Super Café" class="w-full border border-gray-300 rounded-xl p-3 text-sm font-bold focus:outline-coffee-600 mb-4">
+          </div>
+
           <div v-if="loginMode === 'admin'">
             <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Email</label>
             <input v-model="email" type="email" required placeholder="admin@cafe.com" class="w-full border border-gray-300 rounded-xl p-3 text-sm font-bold focus:outline-coffee-600">
@@ -29,9 +34,15 @@
           </div>
 
           <button type="submit" class="w-full bg-amber-400 hover:bg-amber-300 text-coffee-950 font-black py-3.5 rounded-xl text-sm transition shadow-md active:scale-95 mt-2">
-            Se Connecter
+            {{ isSignUp && loginMode === 'admin' ? 'Créer mon Compte' : 'Se Connecter' }}
           </button>
         </form>
+
+        <div v-if="loginMode === 'admin'" class="text-center mt-6">
+          <button @click="isSignUp = !isSignUp" type="button" class="text-gray-400 font-medium text-xs hover:text-coffee-600 transition">
+             {{ isSignUp ? 'Vous avez déjà un compte ? Se connecter' : 'Nouveau gérant ? Créer mon espace' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -43,11 +54,13 @@ import { useRouter } from 'vue-router';
 import { supabase } from '../supabase';
 
 const router = useRouter();
-const loginMode = ref('barista');
+const loginMode = ref('admin'); // Par défaut on affiche l'admin
+const isSignUp = ref(false);
 
 const email = ref('');
 const username = ref('');
 const password = ref('');
+const cafeName = ref('');
 const isLoading = ref(false);
 
 const handleLogin = async () => {
@@ -57,12 +70,34 @@ const handleLogin = async () => {
         
         if (loginMode.value === 'admin') {
             authEmail = email.value;
+            
+            if (isSignUp.value) {
+                // Mode CREATION Admin
+                const { data, error } = await supabase.auth.signUp({
+                    email: authEmail,
+                    password: password.value,
+                });
+                if (error) throw error;
+
+                // Création du café lié
+                if (data.user) {
+                    const { error: dbErr } = await supabase.from('cafes').insert({
+                        admin_id: data.user.id,
+                        name: cafeName.value || 'Mon Café'
+                    });
+                    if (dbErr) throw dbErr;
+                }
+                
+                router.push('/dashboard');
+                return;
+            }
+            
         } else {
-            // For barista, we format the username into a dummy email
-            // e.g. "sofiene" -> "sofiene@barista.local"
+            // For barista
             authEmail = username.value.toLowerCase().trim() + '@barista.local';
         }
 
+        // Mode CONNEXION (Admin ou Barista)
         const { data, error } = await supabase.auth.signInWithPassword({
             email: authEmail,
             password: password.value,
