@@ -25,50 +25,110 @@
         <!-- TAB 1 : COMMANDE (POS)                        -->
         <!-- ============================================== -->
         <section v-if="activeTab === 'pos'" class="p-3">
-            <!-- Category Selector -->
-            <div class="flex space-x-2 overflow-x-auto pb-2 mb-3 scrollbar-none">
-                <button 
-                    v-for="cat in categories" :key="cat.id"
-                    @click="selectedCategory = cat.id"
-                    :class="['px-3.5 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition shadow-sm flex items-center space-x-1.5 active:scale-95', 
-                            selectedCategory === cat.id ? 'bg-coffee-600 text-white shadow-coffee-600/30' : 'bg-white text-gray-700 border border-gray-200']">
-                    <i :class="cat.icon"></i>
-                    <span>{{ cat.name }}</span>
-                </button>
+            <!-- MODE POS CLASSIQUE -->
+            <div v-if="cafeSettings.orderEntryMode === 'pos'">
+                <!-- Category Selector -->
+                <div class="flex space-x-2 overflow-x-auto pb-2 mb-3 scrollbar-none">
+                    <button 
+                        v-for="cat in categories" :key="cat.id"
+                        @click="selectedCategory = cat.id"
+                        :class="['px-3.5 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition shadow-sm flex items-center space-x-1.5 active:scale-95', 
+                                selectedCategory === cat.id ? 'bg-coffee-600 text-white shadow-coffee-600/30' : 'bg-white text-gray-700 border border-gray-200']">
+                        <i :class="cat.icon"></i>
+                        <span>{{ cat.name }}</span>
+                    </button>
+                </div>
+
+                <!-- Products Grid -->
+                <div class="grid grid-cols-2 gap-2.5 mb-4">
+                    <div 
+                        v-for="prod in filteredProducts" :key="prod.id"
+                        @click="addToCart(prod)"
+                        class="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between cursor-pointer active:scale-95 transition select-none relative overflow-hidden">
+                        <div v-if="!prod.is_available" class="absolute inset-0 bg-white/85 backdrop-blur-[1px] flex items-center justify-center font-black text-red-600 text-xs tracking-wider z-10">
+                            ÉPUISÉ
+                        </div>
+                        <div>
+                            <div class="w-full h-24 bg-coffee-50 rounded-xl flex items-center justify-center text-coffee-600 text-3xl mb-2">
+                                <i :class="prod.icon"></i>
+                            </div>
+                            <h4 class="font-bold text-gray-800 text-sm line-clamp-1">{{ prod.name }}</h4>
+                            <p class="text-xs text-gray-400 mt-0.5">{{ prod.recipe_summary || 'Sans recette liée' }}</p>
+                        </div>
+                        <div class="mt-2 flex justify-between items-center pt-2 border-t border-gray-50">
+                            <span class="font-black text-coffee-700 text-sm">{{ prod.price.toFixed(3) }} <span class="text-[10px] font-bold">{{ cafeSettings.currency }}</span></span>
+                            <span class="w-7 h-7 bg-coffee-100 text-coffee-800 rounded-lg flex items-center justify-center text-xs font-black shadow-sm">
+                                <i class="fa-solid fa-plus"></i>
+                            </span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <!-- Products Grid -->
-            <div class="grid grid-cols-2 gap-2.5 mb-4">
-                <div 
-                    v-for="prod in filteredProducts" :key="prod.id"
-                    @click="addToCart(prod)"
-                    class="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between cursor-pointer active:scale-95 transition select-none relative overflow-hidden">
-                    <div v-if="!prod.is_available" class="absolute inset-0 bg-white/85 backdrop-blur-[1px] flex items-center justify-center font-black text-red-600 text-xs tracking-wider z-10">
-                        ÉPUISÉ
+            <!-- MODE GLOBAL (CLÔTURE DE SERVICE) -->
+            <div v-else class="space-y-4">
+                <div class="bg-purple-50 border-l-4 border-purple-500 p-3.5 rounded-r-2xl text-purple-900 text-xs leading-relaxed shadow-sm">
+                    <i class="fa-solid fa-layer-group text-purple-600 mr-1.5"></i>
+                    <strong>Saisie Globale :</strong> Saisissez le total des quantités vendues durant ce service pour clôturer la caisse.
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-16">
+                    <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                        <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Quantités Vendues</h3>
+                        <span class="text-xs font-black text-coffee-600">Total : {{ bulkTotalAmount.toFixed(3) }} {{ cafeSettings.currency }}</span>
                     </div>
-                    <div>
-                        <div class="w-full h-24 bg-coffee-50 rounded-xl flex items-center justify-center text-coffee-600 text-3xl mb-2">
-                            <i :class="prod.icon"></i>
+                    <div class="divide-y divide-gray-100">
+                        <div v-for="prod in products" :key="prod.id" class="p-3 flex justify-between items-center">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-10 h-10 bg-gray-100 text-gray-600 rounded-xl flex items-center justify-center text-lg">
+                                    <i :class="prod.icon"></i>
+                                </div>
+                                <div>
+                                    <h4 class="font-bold text-sm text-gray-800">{{ prod.name }}</h4>
+                                    <p class="text-[10px] text-gray-500 mt-0.5">{{ prod.price.toFixed(3) }} {{ cafeSettings.currency }} / unité</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <button @click="updateBulkQuantity(prod.id, -1)" class="w-8 h-8 rounded-full bg-red-100 text-red-600 hover:bg-red-200 font-black flex items-center justify-center transition active:scale-90">
+                                    <i class="fa-solid fa-minus"></i>
+                                </button>
+                                <input v-model.number="bulkQuantities[prod.id]" type="number" min="0" class="w-14 text-center font-black text-sm border-b-2 border-gray-300 focus:border-coffee-600 focus:outline-none pb-1 bg-transparent">
+                                <button @click="updateBulkQuantity(prod.id, 1)" class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 hover:bg-emerald-200 font-black flex items-center justify-center transition active:scale-90">
+                                    <i class="fa-solid fa-plus"></i>
+                                </button>
+                            </div>
                         </div>
-                        <h4 class="font-bold text-gray-800 text-sm line-clamp-1">{{ prod.name }}</h4>
-                        <p class="text-xs text-gray-400 mt-0.5">{{ prod.recipe_summary || 'Sans recette liée' }}</p>
                     </div>
-                    <div class="mt-2 flex justify-between items-center pt-2 border-t border-gray-50">
-                        <span class="font-black text-coffee-700 text-sm">{{ prod.price.toFixed(3) }} <span class="text-[10px] font-bold">{{ cafeSettings.currency }}</span></span>
-                        <span class="w-7 h-7 bg-coffee-100 text-coffee-800 rounded-lg flex items-center justify-center text-xs font-black shadow-sm">
-                            <i class="fa-solid fa-plus"></i>
-                        </span>
+                    
+                    <div class="p-4 bg-gray-50 border-t border-gray-200 flex items-center space-x-3">
+                        <button 
+                            @click="submitBulkShift"
+                            :disabled="bulkTotalAmount <= 0"
+                            :class="['w-full py-3.5 rounded-xl font-extrabold text-sm flex justify-center items-center space-x-2 transition active:scale-95 shadow-md', bulkTotalAmount > 0 ? 'bg-coffee-600 hover:bg-coffee-500 text-white shadow-coffee-600/30' : 'bg-gray-200 text-gray-400 cursor-not-allowed']">
+                            <i class="fa-solid fa-lock"></i>
+                            <span>Valider la Clôture du Service</span>
+                        </button>
                     </div>
                 </div>
             </div>
         </section>
 
         <!-- ============================================== -->
-        <!-- TAB 2 : VENTES & ANALYTICS                     -->
+        <!-- TAB 2 : FINANCES & ANALYTICS                   -->
         <!-- ============================================== -->
         <section v-if="activeTab === 'sales'" class="p-4 space-y-4">
-            <!-- Summary Cards -->
-            <div class="grid grid-cols-2 gap-3">
+            
+            <!-- Finances Sub-Navigation -->
+            <div class="flex space-x-2 bg-gray-200 p-1 rounded-xl shadow-inner mb-4">
+                <button @click="financeSubTab = 'sales'" :class="['flex-1 py-1.5 text-xs font-bold rounded-lg transition', financeSubTab === 'sales' ? 'bg-white text-coffee-700 shadow-sm' : 'text-gray-500 hover:text-gray-700']">Recettes</button>
+                <button @click="financeSubTab = 'expenses'" :class="['flex-1 py-1.5 text-xs font-bold rounded-lg transition', financeSubTab === 'expenses' ? 'bg-white text-coffee-700 shadow-sm' : 'text-gray-500 hover:text-gray-700']">Sorties</button>
+                <button @click="financeSubTab = 'stats'" :class="['flex-1 py-1.5 text-xs font-bold rounded-lg transition', financeSubTab === 'stats' ? 'bg-white text-coffee-700 shadow-sm' : 'text-gray-500 hover:text-gray-700']">Bénéfices</button>
+            </div>
+
+            <!-- RECETTES SUB-TAB -->
+            <div v-if="financeSubTab === 'sales'" class="space-y-4">
+                <!-- Summary Cards -->
+                <div class="grid grid-cols-2 gap-3">
                 <div class="bg-gradient-to-br from-coffee-600 to-coffee-800 text-white p-3.5 rounded-2xl shadow-md">
                     <span class="text-xs text-coffee-100 block font-medium">Chiffre d'Affaires du Jour</span>
                     <span class="text-xl font-black mt-1 block">{{ todayRevenue.toFixed(3) }} {{ cafeSettings.currency }}</span>
@@ -132,6 +192,103 @@
                         <div v-if="ord.customer_name" class="mt-1.5 text-xs text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg font-bold flex items-center justify-between border border-amber-200/50">
                             <span><i class="fa-solid fa-user-tag mr-1 text-amber-600"></i> Client: {{ ord.customer_name }}</span>
                             <span class="text-[10px] bg-amber-200/60 px-1.5 py-0.5 rounded uppercase font-black text-amber-900">Ardoise</span>
+                        </div>
+                    </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SORTIES SUB-TAB -->
+            <div v-if="financeSubTab === 'expenses'" class="space-y-4">
+                <div class="flex justify-between items-center">
+                    <h2 class="font-extrabold text-gray-800 text-lg">Dépenses & Sorties</h2>
+                    <button 
+                        @click="showAddExpenseModal = true"
+                        class="bg-red-600 text-white text-xs font-extrabold px-3.5 py-2 rounded-xl flex items-center space-x-1.5 hover:bg-red-700 transition active:scale-95 shadow-sm">
+                        <i class="fa-solid fa-minus"></i>
+                        <span>Nouvelle Sortie</span>
+                    </button>
+                </div>
+                
+                <!-- Total Expenses Card -->
+                <div class="bg-gradient-to-br from-red-600 to-red-800 text-white p-3.5 rounded-2xl shadow-md flex justify-between items-center">
+                    <div>
+                        <span class="text-xs text-red-100 block font-medium">Total des Sorties (Mois)</span>
+                        <span class="text-xl font-black mt-1 block">{{ totalExpenses.toFixed(3) }} {{ cafeSettings.currency }}</span>
+                    </div>
+                    <i class="fa-solid fa-money-bill-transfer text-3xl text-red-300/50"></i>
+                </div>
+
+                <!-- Expenses List -->
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                        <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Historique des sorties</h3>
+                    </div>
+                    <div class="divide-y divide-gray-100">
+                        <div v-if="expenses.length === 0" class="p-6 text-center text-gray-400 text-xs italic">
+                            Aucune dépense enregistrée.
+                        </div>
+                        <div v-for="exp in expenses" :key="exp.id" class="p-3.5 hover:bg-gray-50 transition flex justify-between items-center">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-10 h-10 bg-red-50 text-red-600 rounded-xl flex items-center justify-center text-lg">
+                                    <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                                </div>
+                                <div>
+                                    <h4 class="font-bold text-sm text-gray-800">{{ exp.category }}</h4>
+                                    <p class="text-xs text-gray-500 mt-0.5 line-clamp-1">{{ exp.description }}</p>
+                                    <p class="text-[10px] text-gray-400 mt-0.5">{{ new Date(exp.date).toLocaleDateString() }} • Par {{ exp.barista_name }}</p>
+                                </div>
+                            </div>
+                            <span class="font-black text-sm text-red-600">-{{ exp.amount.toFixed(3) }} {{ cafeSettings.currency }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STATS SUB-TAB -->
+            <div v-if="financeSubTab === 'stats'" class="space-y-4">
+                <h2 class="font-extrabold text-gray-800 text-lg mb-2">Bénéfices & Clôtures</h2>
+                
+                <!-- Profit Margin Breakdown -->
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm font-bold text-gray-600">Total Recettes</span>
+                        <span class="text-sm font-black text-emerald-600">{{ todayRevenue.toFixed(3) }} {{ cafeSettings.currency }}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm font-bold text-gray-600">Total Sorties</span>
+                        <span class="text-sm font-black text-red-600">-{{ totalExpenses.toFixed(3) }} {{ cafeSettings.currency }}</span>
+                    </div>
+                    <div class="pt-2 border-t border-gray-200 flex justify-between items-center">
+                        <span class="text-base font-black text-gray-800">Marge Nette (Bénéfice)</span>
+                        <span :class="['text-xl font-black', (todayRevenue - totalExpenses) >= 0 ? 'text-emerald-600' : 'text-red-600']">
+                            {{ (todayRevenue - totalExpenses).toFixed(3) }} {{ cafeSettings.currency }}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Shift Closures List -->
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mt-4">
+                    <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                        <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Clôtures de Caisse (Mode Global)</h3>
+                    </div>
+                    <div class="divide-y divide-gray-100">
+                        <div v-if="shiftClosures.length === 0" class="p-6 text-center text-gray-400 text-xs italic">
+                            Aucune clôture enregistrée.
+                        </div>
+                        <div v-for="shift in shiftClosures" :key="shift.id" class="p-3.5 hover:bg-gray-50 transition">
+                            <div class="flex justify-between items-start mb-1">
+                                <div class="flex items-center space-x-2">
+                                    <span class="w-8 h-8 bg-purple-100 text-purple-700 rounded-lg flex items-center justify-center font-bold">
+                                        <i class="fa-solid fa-lock"></i>
+                                    </span>
+                                    <div>
+                                        <span class="font-black text-sm text-gray-800">Clôture #{{ shift.id.split('_')[1] }}</span>
+                                        <span class="block text-[10px] text-gray-500">{{ new Date(shift.date).toLocaleString() }} • Par {{ shift.barista_name }}</span>
+                                    </div>
+                                </div>
+                                <span class="font-black text-sm text-coffee-700">{{ shift.total_revenue.toFixed(3) }} {{ cafeSettings.currency }}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -386,6 +543,13 @@
                     </div>
                     <input type="checkbox" v-model="cafeSettings.autoPrint" :disabled="currentUser.role !== 'admin'" class="w-5 h-5 accent-coffee-600 rounded cursor-pointer">
                 </div>
+                <div class="pt-2 border-t border-gray-100">
+                    <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Mode de Caisse / Saisie</label>
+                    <select v-model="cafeSettings.orderEntryMode" :disabled="currentUser.role !== 'admin'" class="w-full border border-gray-300 rounded-xl p-2.5 text-xs font-extrabold text-gray-800 focus:outline-coffee-600 bg-gray-50">
+                        <option value="pos">Mode Standard (Caisse classique)</option>
+                        <option value="bulk">Mode Global (Clôture de service)</option>
+                    </select>
+                </div>
             </div>
 
             <!-- SECTION D : SAUVEGARDE & BACKUP BASE DE DONNÉES -->
@@ -415,8 +579,8 @@
 
     </main>
 
-    <!-- Floating Basket Preview (POS Tab only) -->
-    <div v-if="activeTab === 'pos' && cart.length > 0" class="absolute bottom-16 left-0 right-0 p-3 bg-gradient-to-t from-gray-100 via-gray-100/90 to-transparent pointer-events-none z-20">
+    <!-- Floating Basket Preview (POS Tab only - Standard Mode) -->
+    <div v-if="activeTab === 'pos' && cafeSettings.orderEntryMode === 'pos' && cart.length > 0" class="absolute bottom-16 left-0 right-0 p-3 bg-gradient-to-t from-gray-100 via-gray-100/90 to-transparent pointer-events-none z-20">
         <div class="bg-coffee-900 text-white p-3.5 rounded-2xl shadow-xl flex justify-between items-center pointer-events-auto border border-coffee-700">
             <div class="flex items-center space-x-3">
                 <div class="w-10 h-10 bg-amber-400 text-coffee-950 rounded-xl flex items-center justify-center font-black text-lg shadow-sm">
@@ -447,8 +611,8 @@
         <button 
             @click="activeTab = 'sales'"
             :class="['flex flex-col items-center flex-1 py-1 rounded-xl transition relative', activeTab === 'sales' ? 'text-coffee-600 font-extrabold scale-105' : 'text-gray-400 font-medium hover:text-gray-600']">
-            <i class="fa-solid fa-receipt text-xl"></i>
-            <span class="text-[10px] mt-1">Ventes</span>
+            <i class="fa-solid fa-chart-line text-xl"></i>
+            <span class="text-[10px] mt-1">Finances</span>
             <span class="absolute top-1 right-3 w-2 h-2 bg-emerald-500 rounded-full shadow-sm"></span>
         </button>
         <button 
@@ -590,6 +754,48 @@
                             (paymentMethod === 'customer_credit' && !selectedCustomer) ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30']">
                     <i class="fa-solid fa-check-double text-lg"></i>
                     <span>Valider Paiement</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- MODAL SORTIE (DÉPENSE)                                    -->
+    <!-- ========================================================= -->
+    <div v-if="showAddExpenseModal" class="absolute inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center z-40 p-4">
+        <div class="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+            <div class="bg-red-700 text-white px-4 py-3 flex justify-between items-center">
+                <h3 class="font-bold text-base flex items-center">
+                    <i class="fa-solid fa-minus-circle mr-2 text-red-200"></i> Nouvelle Sortie
+                </h3>
+                <button @click="showAddExpenseModal = false" class="text-white/80 hover:text-white">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            <div class="p-4 space-y-3">
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Type de Sortie</label>
+                    <select v-model="newExpenseForm.category" class="w-full border border-gray-300 rounded-xl p-2.5 text-xs font-extrabold focus:outline-red-600">
+                        <option value="Salaire / Paiement Ouvrier">Salaire / Paiement Ouvrier</option>
+                        <option value="Fournitures (Matières 1ères)">Fournitures (Matières 1ères)</option>
+                        <option value="Charges Fixes (Électricité, Eau...)">Charges Fixes (Électricité, Eau...)</option>
+                        <option value="Autre Dépense">Autre Dépense</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Montant ({{ cafeSettings.currency }})</label>
+                    <input v-model.number="newExpenseForm.amount" type="number" step="0.1" placeholder="Ex: 50.0" class="w-full border border-gray-300 rounded-xl p-2.5 text-xs font-black focus:outline-red-600">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Description (Optionnel)</label>
+                    <input v-model="newExpenseForm.description" type="text" placeholder="Ex: Paiement journalier, Achat sucre..." class="w-full border border-gray-300 rounded-xl p-2.5 text-xs font-medium focus:outline-red-600">
+                </div>
+            </div>
+            <div class="p-4 bg-gray-50 border-t border-gray-200">
+                <button 
+                    @click="saveExpense"
+                    class="w-full bg-red-600 hover:bg-red-500 text-white font-black py-3 rounded-xl text-sm transition shadow-md active:scale-95">
+                    Valider la Sortie
                 </button>
             </div>
         </div>
@@ -811,8 +1017,17 @@ const router = useRouter();
             currency: 'TND',
             taxRate: 19,
             fiscalId: '1234567/X/A/M/000',
-            autoPrint: true
+            autoPrint: true,
+            orderEntryMode: 'pos' // 'pos' or 'bulk'
         });
+
+        // Finances State
+        const financeSubTab = ref('sales'); // 'sales', 'expenses', 'stats'
+        const expenses = ref([
+            // Example mock expense
+            { id: 'exp_1', amount: 120.0, category: 'Fournitures', description: 'Gobelets et serviettes', date: new Date().toISOString(), barista_name: 'Gérant (Admin)' }
+        ]);
+        const shiftClosures = ref([]);
 
         // Real Users Data
         const userList = ref([]);
@@ -996,6 +1211,26 @@ const router = useRouter();
 
         // Product Administration
         const showAddProductModal = ref(false);
+        const showAddExpenseModal = ref(false);
+        
+        const newExpenseForm = ref({ amount: null, category: 'Fournitures', description: '' });
+        
+        const saveExpense = () => {
+            if (!newExpenseForm.value.amount || newExpenseForm.value.amount <= 0) {
+                alert("Montant invalide.");
+                return;
+            }
+            expenses.value.unshift({
+                id: 'exp_' + Date.now(),
+                amount: newExpenseForm.value.amount,
+                category: newExpenseForm.value.category,
+                description: newExpenseForm.value.description,
+                date: new Date().toISOString(),
+                barista_name: currentUser.value.name
+            });
+            showAddExpenseModal.value = false;
+            newExpenseForm.value = { amount: null, category: 'Fournitures', description: '' };
+        };
         const newProdForm = ref({ name: '', price: 3.000, category_id: 'hot', icon: 'fa-solid fa-mug-hot', recipe: [{ inv_id: '', inv_qty: 0 }] });
         
         const confirmAddProduct = () => {
@@ -1046,7 +1281,71 @@ const router = useRouter();
 
         // Orders & Cart
         const cart = ref([]);
+
+        // Bulk Entry Mode
+        const bulkQuantities = ref({});
         
+        onMounted(() => {
+            // Initialize bulk quantities
+            products.value.forEach(p => bulkQuantities.value[p.id] = 0);
+        });
+
+        const updateBulkQuantity = (prodId, delta) => {
+            if (bulkQuantities.value[prodId] === undefined) {
+                bulkQuantities.value[prodId] = 0;
+            }
+            const newQty = bulkQuantities.value[prodId] + delta;
+            if (newQty >= 0) {
+                bulkQuantities.value[prodId] = newQty;
+            }
+        };
+
+        const bulkTotalAmount = computed(() => {
+            let total = 0;
+            for (const prod of products.value) {
+                const qty = bulkQuantities.value[prod.id] || 0;
+                total += qty * prod.price;
+            }
+            return total;
+        });
+
+        const submitBulkShift = () => {
+            if (bulkTotalAmount.value <= 0) return;
+            
+            const details = [];
+            
+            // Deduct stock and build details
+            for (const prod of products.value) {
+                const qty = bulkQuantities.value[prod.id] || 0;
+                if (qty > 0) {
+                    details.push({ product: prod, qty: qty });
+                    // Deduct recipe stock
+                    if (prod.recipe && prod.recipe.length > 0) {
+                        for (const item of prod.recipe) {
+                            const invItem = inventory.value.find(i => i.id === item.inv_id || i.id === item.id);
+                            if (invItem) {
+                                invItem.current_stock -= (item.inv_qty || item.qty) * qty;
+                                if (invItem.current_stock < 0) invItem.current_stock = 0;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Add shift closure record
+            shiftClosures.value.unshift({
+                id: 'shift_' + Date.now(),
+                total_revenue: bulkTotalAmount.value,
+                date: new Date().toISOString(),
+                barista_name: currentUser.value.name,
+                details: details
+            });
+            
+            // Reset bulk quantities
+            products.value.forEach(p => bulkQuantities.value[p.id] = 0);
+            
+            alert(`Service clôturé avec succès. Total: ${bulkTotalAmount.value.toFixed(3)} ${cafeSettings.value.currency}`);
+        };
         const addToCart = (prod) => {
             if (!prod.is_available) return;
             const existing = cart.value.find(item => item.product.id === prod.id);
@@ -1081,7 +1380,12 @@ const router = useRouter();
         });
 
         const todayRevenue = computed(() => {
-            return orders.value.reduce((acc, o) => acc + o.total_amount, 0);
+            const posRevenue = orders.value.reduce((acc, o) => acc + o.total_amount, 0);
+            const bulkRevenue = shiftClosures.value.reduce((acc, s) => acc + s.total_revenue, 0);
+            return posRevenue + bulkRevenue;
+        });
+        const totalExpenses = computed(() => {
+            return expenses.value.reduce((acc, exp) => acc + exp.amount, 0);
         });
         const cashRevenue = computed(() => {
             return orders.value.filter(o => o.payment_method === 'cash').reduce((acc, o) => acc + o.total_amount, 0);
@@ -1230,7 +1534,9 @@ const router = useRouter();
                 products: products.value,
                 inventory_items: inventory.value,
                 customers: customers.value,
-                orders: orders.value
+                orders: orders.value,
+                expenses: expenses.value,
+                shift_closures: shiftClosures.value
             };
 
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupObject, null, 2));
