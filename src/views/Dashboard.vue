@@ -301,12 +301,21 @@
         <section v-if="activeTab === 'stock'" class="p-4 space-y-4">
             <div class="flex justify-between items-center">
                 <h2 class="font-extrabold text-gray-800 text-lg">Stock & Fournitures</h2>
-                <button 
-                    @click="showAddStockModal = true"
-                    class="bg-coffee-700 text-white text-xs font-extrabold px-3.5 py-2 rounded-xl flex items-center space-x-1.5 hover:bg-coffee-800 transition active:scale-95 shadow-sm">
-                    <i class="fa-solid fa-box-open"></i>
-                    <span>Approvisionner</span>
-                </button>
+                <div class="flex space-x-2">
+                    <button 
+                        @click="showAddStockModal = true"
+                        class="bg-coffee-700 text-white text-xs font-extrabold px-3 py-2 rounded-xl flex items-center space-x-1.5 hover:bg-coffee-800 transition active:scale-95 shadow-sm">
+                        <i class="fa-solid fa-box-open"></i>
+                        <span>Approvisionner</span>
+                    </button>
+                    <button 
+                        v-if="currentUser.role === 'admin'"
+                        @click="openCreateInventoryModal()"
+                        class="bg-emerald-600 text-white text-xs font-extrabold px-3 py-2 rounded-xl flex items-center space-x-1.5 hover:bg-emerald-700 transition active:scale-95 shadow-sm">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>Nouveau</span>
+                    </button>
+                </div>
             </div>
 
             <!-- Alert Banner -->
@@ -334,15 +343,28 @@
                             <span class="text-xs text-gray-400">Seuil min: {{ item.min_stock_alert }} {{ item.unit }}</span>
                         </div>
                     </div>
-                    <div class="text-right">
-                        <div :class="['font-black text-base', item.current_stock <= item.min_stock_alert ? 'text-red-600 font-black' : 'text-gray-800']">
+                    <div class="flex flex-col items-end space-y-2">
+                        <div :class="['font-black text-base text-right', item.current_stock <= item.min_stock_alert ? 'text-red-600 font-black' : 'text-gray-800']">
                             {{ item.current_stock }} <span class="text-xs font-semibold text-gray-500">{{ item.unit }}</span>
                         </div>
-                        <div v-if="item.current_stock <= item.min_stock_alert" class="text-[10px] font-black text-red-600 uppercase tracking-tight bg-red-50 px-1.5 py-0.5 rounded mt-1 inline-block">
-                            <i class="fa-solid fa-cart-shopping mr-1"></i> À commander
-                        </div>
-                        <div v-else class="text-[10px] text-emerald-600 font-bold uppercase tracking-tight mt-1 bg-emerald-50 px-1.5 py-0.5 rounded inline-block">
-                            Stock suffisant
+                        <div class="flex items-center justify-end space-x-2">
+                            <div v-if="item.current_stock <= item.min_stock_alert" class="text-[10px] font-black text-red-600 uppercase tracking-tight bg-red-50 px-1.5 py-0.5 rounded inline-block">
+                                <i class="fa-solid fa-cart-shopping"></i>
+                            </div>
+                            <button 
+                                v-if="currentUser.role === 'admin'"
+                                @click="openEditInventoryModal(item)"
+                                class="text-gray-400 hover:text-blue-600 p-1 transition text-sm"
+                                title="Modifier l'article">
+                                <i class="fa-solid fa-pen-to-square"></i>
+                            </button>
+                            <button 
+                                v-if="currentUser.role === 'admin'"
+                                @click="deleteInventoryItem(item)"
+                                class="text-gray-400 hover:text-red-600 p-1 transition text-sm"
+                                title="Supprimer l'article">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -967,6 +989,42 @@
         </div>
     </div>
 
+    <!-- Add/Edit Inventory Item Modal -->
+    <div v-if="showManageInventoryModal" class="absolute inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center z-40 p-4">
+        <div class="bg-white w-full rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+            <div class="bg-coffee-700 text-white px-4 py-3 flex justify-between items-center">
+                <h3 class="font-bold text-base flex items-center"><i class="fa-solid fa-boxes-stacked mr-2 text-amber-400"></i> {{ manageInventoryMode === 'add' ? 'Nouvel Article Stock' : 'Modifier Article' }}</h3>
+                <button @click="showManageInventoryModal = false" class="text-white/80 hover:text-white">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            <div class="p-4 space-y-3">
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Nom de l'ingrédient</label>
+                    <input v-model="manageInventoryForm.name" type="text" placeholder="Ex: Gobelets 8oz" class="w-full border border-gray-300 rounded-xl p-2.5 text-xs font-extrabold focus:outline-coffee-600">
+                </div>
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Unité</label>
+                        <input v-model="manageInventoryForm.unit" type="text" placeholder="kg, L, unités" class="w-full border border-gray-300 rounded-xl p-2.5 text-xs font-black focus:outline-coffee-600">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Seuil Alerte</label>
+                        <input v-model.number="manageInventoryForm.min_stock_alert" type="number" step="0.5" class="w-full border border-gray-300 rounded-xl p-2.5 text-xs font-black focus:outline-coffee-600">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Icône (FontAwesome)</label>
+                    <input v-model="manageInventoryForm.icon" type="text" placeholder="fa-solid fa-box" class="w-full border border-gray-300 rounded-xl p-2 text-xs font-mono focus:outline-coffee-600">
+                </div>
+            </div>
+            <div class="p-3.5 bg-gray-50 border-t border-gray-200 flex justify-end space-x-2">
+                <button @click="showManageInventoryModal = false" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-xl text-xs font-bold">Annuler</button>
+                <button @click="confirmSaveInventoryItem" class="px-5 py-2 bg-coffee-600 text-white rounded-xl text-xs font-black hover:bg-coffee-500 shadow-sm shadow-coffee-600/30">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Add Customer Modal -->
     <div v-if="showAddCustomerModal" class="absolute inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center z-40 p-4">
         <div class="bg-white w-full rounded-3xl shadow-2xl overflow-hidden flex flex-col">
@@ -1023,10 +1081,7 @@ const router = useRouter();
 
         // Finances State
         const financeSubTab = ref('sales'); // 'sales', 'expenses', 'stats'
-        const expenses = ref([
-            // Example mock expense
-            { id: 'exp_1', amount: 120.0, category: 'Fournitures', description: 'Gobelets et serviettes', date: new Date().toISOString(), barista_name: 'Gérant (Admin)' }
-        ]);
+        const expenses = ref([]);
         const shiftClosures = ref([]);
 
         // Real Users Data
@@ -1182,11 +1237,11 @@ const router = useRouter();
 
         // Mock Inventory
         const inventory = ref([
-            { id: 'inv_1', name: 'Café en grains Espresso', unit: 'kg', current_stock: 3.5, min_stock_alert: 5.0, icon: 'fa-solid fa-seedling' },
-            { id: 'inv_2', name: 'Lait demi-écrémé', unit: 'L', current_stock: 12.0, min_stock_alert: 10.0, icon: 'fa-solid fa-cow' },
-            { id: 'inv_3', name: 'Sucre en sachets', unit: 'boîtes', current_stock: 4.0, min_stock_alert: 5.0, icon: 'fa-solid fa-cubes-stacked' },
-            { id: 'inv_4', name: 'Gobelets Takeaway 8oz', unit: 'unités', current_stock: 45, min_stock_alert: 100, icon: 'fa-solid fa-cup-togo' },
-            { id: 'inv_5', name: 'Croissants Pur Beurre', unit: 'unités', current_stock: 8, min_stock_alert: 10, icon: 'fa-solid fa-croissant' }
+            { id: 'inv_1', name: 'Café en grains Espresso', unit: 'kg', current_stock: 0, min_stock_alert: 5.0, icon: 'fa-solid fa-seedling' },
+            { id: 'inv_2', name: 'Lait demi-écrémé', unit: 'L', current_stock: 0, min_stock_alert: 10.0, icon: 'fa-solid fa-cow' },
+            { id: 'inv_3', name: 'Sucre en sachets', unit: 'boîtes', current_stock: 0, min_stock_alert: 5.0, icon: 'fa-solid fa-cubes-stacked' },
+            { id: 'inv_4', name: 'Gobelets Takeaway 8oz', unit: 'unités', current_stock: 0, min_stock_alert: 100, icon: 'fa-solid fa-cup-togo' },
+            { id: 'inv_5', name: 'Croissants Pur Beurre', unit: 'unités', current_stock: 0, min_stock_alert: 10, icon: 'fa-solid fa-croissant' }
         ]);
 
         const stockAlerts = computed(() => {
@@ -1269,11 +1324,7 @@ const router = useRouter();
         };
 
         // Mock Customers
-        const customers = ref([
-            { id: 'c1', full_name: 'Ahmed Trabelssi', phone: '22 334 455', credit_balance: 14.500, credit_limit: 100.0 },
-            { id: 'c2', full_name: 'Sarra Ben Ali', phone: '98 123 456', credit_balance: 85.000, credit_limit: 100.0 },
-            { id: 'c3', full_name: 'Docteur Mehdi', phone: '50 998 877', credit_balance: 0.000, credit_limit: 150.0 }
-        ]);
+        const customers = ref([]);
 
         const totalOutstandingCredit = computed(() => {
             return customers.value.reduce((acc, c) => acc + c.credit_balance, 0);
@@ -1324,7 +1375,7 @@ const router = useRouter();
                         for (const item of prod.recipe) {
                             const invItem = inventory.value.find(i => i.id === item.inv_id || i.id === item.id);
                             if (invItem) {
-                                invItem.current_stock -= (item.inv_qty || item.qty) * qty;
+                                invItem.current_stock = Number((invItem.current_stock - ((item.inv_qty || item.qty) * qty)).toFixed(2));
                                 if (invItem.current_stock < 0) invItem.current_stock = 0;
                             }
                         }
@@ -1369,11 +1420,7 @@ const router = useRouter();
         });
 
         // Mock Orders History
-        const orders = ref([
-            { id: 'o1', order_number: 101, barista_name: 'Sofiene', total_amount: 6.700, payment_method: 'cash', created_at: new Date(Date.now() - 3600000).toISOString(), table_number: 'Terrasse 1' },
-            { id: 'o2', order_number: 102, barista_name: 'Sofiene', total_amount: 4.500, payment_method: 'card', created_at: new Date(Date.now() - 2400000).toISOString(), table_number: '' },
-            { id: 'o3', order_number: 103, barista_name: 'Mona (Gérante)', total_amount: 14.500, payment_method: 'customer_credit', created_at: new Date(Date.now() - 1200000).toISOString(), customer_name: 'Ahmed Trabelssi', table_number: 'Table 4' }
-        ]);
+        const orders = ref([]);
 
         const sortedOrders = computed(() => {
             return [...orders.value].reverse();
@@ -1426,7 +1473,7 @@ const router = useRouter();
                 cartItem.product.recipe?.forEach(rec => {
                     const inv = inventory.value.find(i => i.id === rec.id);
                     if (inv) {
-                        inv.current_stock = Number((inv.current_stock - (rec.qty * cartItem.quantity)).toFixed(3));
+                        inv.current_stock = Number((inv.current_stock - (rec.qty * cartItem.quantity)).toFixed(2));
                     }
                 });
             });
@@ -1476,7 +1523,7 @@ const router = useRouter();
         const confirmAddStock = () => {
             const item = inventory.value.find(i => i.id === stockForm.value.item_id);
             if (item) {
-                item.current_stock = Number((item.current_stock + stockForm.value.qty).toFixed(3));
+                item.current_stock = Number((item.current_stock + stockForm.value.qty).toFixed(2));
                 if (item.current_stock > 0) {
                     products.value.forEach(p => {
                         if (p.recipe?.some(r => r.id === item.id)) {
@@ -1488,6 +1535,55 @@ const router = useRouter();
                 showAddStockModal.value = false;
                 stockForm.value.qty = 0;
                 stockForm.value.note = '';
+            }
+        };
+
+        // Add/Edit Inventory Item
+        const showManageInventoryModal = ref(false);
+        const manageInventoryMode = ref('add');
+        const manageInventoryForm = ref({ id: '', name: '', unit: '', min_stock_alert: 5.0, icon: 'fa-solid fa-box' });
+
+        const openCreateInventoryModal = () => {
+            manageInventoryMode.value = 'add';
+            manageInventoryForm.value = { id: '', name: '', unit: '', min_stock_alert: 5.0, icon: 'fa-solid fa-box' };
+            showManageInventoryModal.value = true;
+        };
+
+        const openEditInventoryModal = (item) => {
+            manageInventoryMode.value = 'edit';
+            manageInventoryForm.value = { ...item };
+            showManageInventoryModal.value = true;
+        };
+
+        const confirmSaveInventoryItem = () => {
+            if (!manageInventoryForm.value.name || !manageInventoryForm.value.unit) return;
+            
+            if (manageInventoryMode.value === 'add') {
+                inventory.value.push({
+                    id: 'inv_' + Date.now(),
+                    name: manageInventoryForm.value.name,
+                    unit: manageInventoryForm.value.unit,
+                    current_stock: 0,
+                    min_stock_alert: manageInventoryForm.value.min_stock_alert,
+                    icon: manageInventoryForm.value.icon || 'fa-solid fa-box'
+                });
+            } else {
+                const idx = inventory.value.findIndex(i => i.id === manageInventoryForm.value.id);
+                if (idx !== -1) {
+                    inventory.value[idx] = { ...inventory.value[idx], ...manageInventoryForm.value };
+                }
+            }
+            showManageInventoryModal.value = false;
+        };
+
+        const deleteInventoryItem = (item) => {
+            const isUsed = products.value.some(p => p.recipe && p.recipe.some(r => r.id === item.id));
+            if (isUsed) {
+                alert("Impossible de supprimer cet ingrédient car il est utilisé dans la recette d'un produit.");
+                return;
+            }
+            if (confirm(`Voulez-vous vraiment supprimer ${item.name} du stock ?`)) {
+                inventory.value = inventory.value.filter(i => i.id !== item.id);
             }
         };
 
