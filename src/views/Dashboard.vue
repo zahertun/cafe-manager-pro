@@ -489,7 +489,7 @@
                         </div>
                         <div class="flex items-center space-x-2">
                             <button 
-                                @click="p.is_available = !p.is_available"
+                                @click="toggleAvailability(p)"
                                 :class="['px-2 py-1 rounded-lg text-[10px] font-black uppercase transition', p.is_available ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800']">
                                 {{ p.is_available ? 'Disponible' : 'Épuisé' }}
                             </button>
@@ -1130,7 +1130,8 @@ import { createClient } from '@supabase/supabase-js';
 const router = useRouter();
 
 // App State
-        const activeTab = ref('pos'); // pos, sales, stock, customers, settings
+        const activeTab = ref('pos');
+const currentCafeId = ref(null); // pos, sales, stock, customers, settings
         
         // Settings State
         const cafeSettings = ref({
@@ -1194,6 +1195,34 @@ const router = useRouter();
                      currentUser.value = { id: userId, name: isProbablyAdmin ? 'Gérant (Réparation)' : 'Barista Anonyme', role: 'barista' };
                  }
                  userList.value = [currentUser.value];
+             }
+
+             if (currentUser.value.role === 'admin') {
+                 currentCafeId.value = currentUser.value.id;
+             } else {
+                 const { data: bAcc } = await supabase.from('barista_accounts').select('cafe_id').eq('username', session.user.email.split('@')[0]).single();
+                 if (bAcc) currentCafeId.value = bAcc.cafe_id;
+             }
+             
+             if (currentCafeId.value) {
+                 const [invRes, prodRes, custRes, ordRes, expRes, shiftRes] = await Promise.all([
+                     supabase.from('inventory').select('*').eq('cafe_id', currentCafeId.value),
+                     supabase.from('products').select('*').eq('cafe_id', currentCafeId.value),
+                     supabase.from('customers').select('*').eq('cafe_id', currentCafeId.value),
+                     supabase.from('orders').select('*').eq('cafe_id', currentCafeId.value).order('created_at', { ascending: false }).limit(100),
+                     supabase.from('expenses').select('*').eq('cafe_id', currentCafeId.value).order('date', { ascending: false }).limit(100),
+                     supabase.from('shift_closures').select('*').eq('cafe_id', currentCafeId.value).order('date', { ascending: false }).limit(50)
+                 ]);
+                 if(invRes.data) inventory.value = invRes.data;
+                 if(prodRes.data) products.value = prodRes.data;
+                 if(custRes.data) customers.value = custRes.data;
+                 if(ordRes.data) orders.value = ordRes.data;
+                 if(expRes.data) expenses.value = expRes.data;
+                 if(shiftRes.data) shiftClosures.value = shiftRes.data;
+                 
+                 products.value.forEach(p => {
+                     if (bulkQuantities.value[p.id] === undefined) bulkQuantities.value[p.id] = 0;
+                 });
              }
         });
 
@@ -1299,28 +1328,14 @@ const router = useRouter();
         const selectedCategory = ref('all');
 
         // Mock Inventory
-        const inventory = ref([
-            { id: 'inv_1', name: 'Café en grains Espresso', unit: 'kg', current_stock: 0, min_stock_alert: 5.0, icon: 'fa-solid fa-seedling' },
-            { id: 'inv_2', name: 'Lait demi-écrémé', unit: 'L', current_stock: 0, min_stock_alert: 10.0, icon: 'fa-solid fa-cow' },
-            { id: 'inv_3', name: 'Sucre en sachets', unit: 'boîtes', current_stock: 0, min_stock_alert: 5.0, icon: 'fa-solid fa-cubes-stacked' },
-            { id: 'inv_4', name: 'Gobelets Takeaway 8oz', unit: 'unités', current_stock: 0, min_stock_alert: 100, icon: 'fa-solid fa-cup-togo' },
-            { id: 'inv_5', name: 'Croissants Pur Beurre', unit: 'unités', current_stock: 0, min_stock_alert: 10, icon: 'fa-solid fa-croissant' }
-        ]);
+        const inventory = ref([]);
 
         const stockAlerts = computed(() => {
             return inventory.value.filter(i => i.current_stock <= i.min_stock_alert);
         });
 
         // Mock Products
-        const products = ref([
-            { id: 'p1', category_id: 'hot', name: 'Espresso Single', price: 2.200, is_available: true, icon: 'fa-solid fa-mug-hot', recipe_summary: '14g café', recipe: [{ id: 'inv_1', qty: 0.014 }] },
-            { id: 'p2', category_id: 'hot', name: 'Capuccino Mousseux', price: 4.500, is_available: true, icon: 'fa-solid fa-mug-saucer', recipe_summary: '14g café + 0.2L lait', recipe: [{ id: 'inv_1', qty: 0.014 }, { id: 'inv_2', qty: 0.2 }] },
-            { id: 'p3', category_id: 'hot', name: 'Café Crème Direct', price: 3.800, is_available: true, icon: 'fa-solid fa-coffee', recipe_summary: '14g café + 0.1L lait', recipe: [{ id: 'inv_1', qty: 0.014 }, { id: 'inv_2', qty: 0.1 }] },
-            { id: 'p4', category_id: 'cold', name: 'Iced Coffee Frappé', price: 5.500, is_available: true, icon: 'fa-solid fa-whiskey-glass', recipe_summary: '14g café + 0.25L lait + glace', recipe: [{ id: 'inv_1', qty: 0.014 }, { id: 'inv_2', qty: 0.25 }] },
-            { id: 'p5', category_id: 'cold', name: 'Jus d\'Orange Pressé', price: 4.000, is_available: true, icon: 'fa-solid fa-glass-water', recipe_summary: 'Oranges fraîches', recipe: [] },
-            { id: 'p6', category_id: 'pastry', name: 'Croissant au Beurre', price: 2.500, is_available: true, icon: 'fa-solid fa-cookie', recipe_summary: '1 croissant', recipe: [{ id: 'inv_5', qty: 1 }] },
-            { id: 'p7', category_id: 'pastry', name: 'Fondant Chocolat', price: 4.200, is_available: true, icon: 'fa-solid fa-cake-candles', recipe_summary: 'Tranche de gâteau', recipe: [] }
-        ]);
+        const products = ref([]);
 
         const filteredProducts = computed(() => {
             if (selectedCategory.value === 'all') return products.value;
@@ -1333,25 +1348,28 @@ const router = useRouter();
         
         const newExpenseForm = ref({ amount: null, category: 'Fournitures', description: '' });
         
-        const saveExpense = () => {
+        const saveExpense = async () => {
             if (!newExpenseForm.value.amount || newExpenseForm.value.amount <= 0) {
                 alert("Montant invalide.");
                 return;
             }
-            expenses.value.unshift({
-                id: 'exp_' + Date.now(),
+            const newExp = {
+                cafe_id: currentCafeId.value,
                 amount: newExpenseForm.value.amount,
                 category: newExpenseForm.value.category,
                 description: newExpenseForm.value.description,
                 date: new Date().toISOString(),
                 barista_name: currentUser.value.name
-            });
+            };
+            const { data, error } = await supabase.from('expenses').insert(newExp).select().single();
+            if (error) { alert("Erreur: " + error.message); return; }
+            expenses.value.unshift(data);
             showAddExpenseModal.value = false;
             newExpenseForm.value = { amount: null, category: 'Fournitures', description: '' };
         };
         const newProdForm = ref({ name: '', price: 3.000, category_id: 'hot', icon: 'fa-solid fa-mug-hot', recipe: [{ inv_id: '', inv_qty: 0 }] });
         
-        const confirmAddProduct = () => {
+        const confirmAddProduct = async () => {
             if (!newProdForm.value.name) return;
             const recipe = [];
             const summaryParts = [];
@@ -1365,8 +1383,8 @@ const router = useRouter();
             });
             const recipeSummary = summaryParts.join(' + ') || 'Sans recette liée';
 
-            products.value.push({
-                id: 'p' + Date.now(),
+            const newProd = {
+                cafe_id: currentCafeId.value,
                 name: newProdForm.value.name,
                 price: newProdForm.value.price,
                 category_id: newProdForm.value.category_id,
@@ -1374,14 +1392,23 @@ const router = useRouter();
                 is_available: true,
                 recipe: recipe,
                 recipe_summary: recipeSummary
-            });
+            };
+            const { data, error } = await supabase.from('products').insert(newProd).select().single();
+            if (error) { alert("Erreur: " + error.message); return; }
+            products.value.push(data);
             alert(`Produit ${newProdForm.value.name} ajouté au catalogue !`);
             showAddProductModal.value = false;
             newProdForm.value = { name: '', price: 3.000, category_id: 'hot', icon: 'fa-solid fa-mug-hot', recipe: [{ inv_id: '', inv_qty: 0 }] };
         };
 
-        const deleteProduct = (id) => {
+        const toggleAvailability = async (p) => {
+            p.is_available = !p.is_available;
+            await supabase.from('products').update({ is_available: p.is_available }).eq('id', p.id);
+        };
+        const deleteProduct = async (id) => {
             if (confirm('Voulez-vous vraiment supprimer cet article du catalogue ?')) {
+                const { error } = await supabase.from('products').delete().eq('id', id);
+                if (error) { alert("Erreur: " + error.message); return; }
                 products.value = products.value.filter(p => p.id !== id);
             }
         };
@@ -1400,10 +1427,7 @@ const router = useRouter();
         const bulkDate = ref(new Date().toISOString().slice(0, 10));
         const bulkQuantities = ref({});
         
-        onMounted(() => {
-            // Initialize bulk quantities
-            products.value.forEach(p => bulkQuantities.value[p.id] = 0);
-        });
+        
 
         const updateBulkQuantity = (prodId, delta) => {
             if (bulkQuantities.value[prodId] === undefined) {
@@ -1424,43 +1448,44 @@ const router = useRouter();
             return total;
         });
 
-        const submitBulkShift = () => {
+        const submitBulkShift = async () => {
             if (bulkTotalAmount.value <= 0) return;
             
             const details = [];
             
-            // Deduct stock and build details
             for (const prod of products.value) {
                 const qty = bulkQuantities.value[prod.id] || 0;
                 if (qty > 0) {
                     details.push({ product: prod, qty: qty });
-                    // Deduct recipe stock
                     if (prod.recipe && prod.recipe.length > 0) {
                         for (const item of prod.recipe) {
                             const invItem = inventory.value.find(i => i.id === item.inv_id || i.id === item.id);
                             if (invItem) {
-                                invItem.current_stock = Number((invItem.current_stock - ((item.inv_qty || item.qty) * qty)).toFixed(2));
-                                if (invItem.current_stock < 0) invItem.current_stock = 0;
+                                const newStock = Number((invItem.current_stock - ((item.inv_qty || item.qty) * qty)).toFixed(2));
+                                invItem.current_stock = newStock < 0 ? 0 : newStock;
+                                await supabase.from('inventory').update({ current_stock: invItem.current_stock }).eq('id', invItem.id);
                             }
                         }
                     }
                 }
             }
             
-            // Add shift closure record
             const shiftDateObj = new Date(bulkDate.value);
             const now = new Date();
             shiftDateObj.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
             
-            shiftClosures.value.unshift({
-                id: 'shift_' + Date.now(),
+            const newShift = {
+                cafe_id: currentCafeId.value,
                 total_revenue: bulkTotalAmount.value,
                 date: shiftDateObj.toISOString(),
                 barista_name: currentUser.value.name,
                 details: details
-            });
+            };
             
-            // Reset bulk quantities
+            const { data, error } = await supabase.from('shift_closures').insert(newShift).select().single();
+            if (error) { alert("Erreur: " + error.message); return; }
+            
+            shiftClosures.value.unshift(data);
             products.value.forEach(p => bulkQuantities.value[p.id] = 0);
             
             alert(`Service clôturé avec succès. Total: ${bulkTotalAmount.value.toFixed(3)} ${cafeSettings.value.currency}`);
@@ -1542,15 +1567,15 @@ const router = useRouter();
         const selectedCustomer = ref(null);
         const orderNotes = ref('');
 
-        const confirmOrder = () => {
+        const confirmOrder = async () => {
             if (cart.value.length === 0) return;
 
-            // Handle customer credit update
             let custName = null;
             if (paymentMethod.value === 'customer_credit') {
                 const cust = customers.value.find(c => c.id === selectedCustomer.value);
                 if (cust) {
                     cust.credit_balance += cartTotal.value;
+                    await supabase.from('customers').update({ credit_balance: cust.credit_balance }).eq('id', cust.id);
                     custName = cust.full_name;
                 }
             } else if (selectedCustomer.value) {
@@ -1558,30 +1583,31 @@ const router = useRouter();
                 if (cust) custName = cust.full_name;
             }
 
-            // Deduct inventory stock
-            cart.value.forEach(cartItem => {
-                cartItem.product.recipe?.forEach(rec => {
-                    const inv = inventory.value.find(i => i.id === rec.id);
-                    if (inv) {
-                        inv.current_stock = Number((inv.current_stock - (rec.qty * cartItem.quantity)).toFixed(2));
+            for (const cartItem of cart.value) {
+                if (cartItem.product.recipe) {
+                    for (const rec of cartItem.product.recipe) {
+                        const inv = inventory.value.find(i => i.id === rec.id);
+                        if (inv) {
+                            inv.current_stock = Number((inv.current_stock - (rec.qty * cartItem.quantity)).toFixed(2));
+                            await supabase.from('inventory').update({ current_stock: inv.current_stock }).eq('id', inv.id);
+                        }
                     }
-                });
-            });
+                }
+            }
 
-            // Check if any stock became <= 0
-            inventory.value.forEach(inv => {
+            for (const inv of inventory.value) {
                 if (inv.current_stock <= 0) {
-                    products.value.forEach(p => {
+                    for (const p of products.value) {
                         if (p.recipe?.some(r => r.id === inv.id)) {
                             p.is_available = false;
+                            await supabase.from('products').update({ is_available: false }).eq('id', p.id);
                         }
-                    });
+                    }
                 }
-            });
+            }
 
-            // Add order
             const newOrder = {
-                id: 'o' + Date.now(),
+                cafe_id: currentCafeId.value,
                 order_number: 100 + orders.value.length + 1,
                 barista_name: currentUser.value.name,
                 total_amount: cartTotal.value,
@@ -1591,35 +1617,35 @@ const router = useRouter();
                 customer_name: custName,
                 notes: orderNotes.value
             };
-            orders.value.push(newOrder);
-
-            if (cafeSettings.value.autoPrint) {
-                console.log(`[PRINT] Impression ticket pour commande #${newOrder.order_number}`);
-            }
-
-            // Reset
+            
+            const { data, error } = await supabase.from('orders').insert(newOrder).select().single();
+            if (error) { alert("Erreur: " + error.message); return; }
+            
+            orders.value.push(data);
             cart.value = [];
             showOrderModal.value = false;
             orderNotes.value = '';
             selectedCustomer.value = null;
-            
-            alert(`Encaissé avec succès ! Commande #${newOrder.order_number}`);
+            alert(`Encaissé avec succès ! Commande #${data.order_number}`);
         };
 
         // Add Stock Modal
         const showAddStockModal = ref(false);
         const stockForm = ref({ item_id: 'inv_1', qty: 5, note: '' });
         
-        const confirmAddStock = () => {
+        const confirmAddStock = async () => {
             const item = inventory.value.find(i => i.id === stockForm.value.item_id);
             if (item) {
                 item.current_stock = Number((item.current_stock + stockForm.value.qty).toFixed(2));
+                await supabase.from('inventory').update({ current_stock: item.current_stock }).eq('id', item.id);
+                
                 if (item.current_stock > 0) {
-                    products.value.forEach(p => {
-                        if (p.recipe?.some(r => r.id === item.id)) {
+                    for (const p of products.value) {
+                        if (p.recipe?.some(r => r.id === item.id) && !p.is_available) {
                             p.is_available = true;
+                            await supabase.from('products').update({ is_available: true }).eq('id', p.id);
                         }
-                    });
+                    }
                 }
                 alert(`Stock mis à jour pour ${item.name} : ${item.current_stock} ${item.unit}`);
                 showAddStockModal.value = false;
@@ -1645,34 +1671,40 @@ const router = useRouter();
             showManageInventoryModal.value = true;
         };
 
-        const confirmSaveInventoryItem = () => {
+        const confirmSaveInventoryItem = async () => {
             if (!manageInventoryForm.value.name || !manageInventoryForm.value.unit) return;
             
             if (manageInventoryMode.value === 'add') {
-                inventory.value.push({
-                    id: 'inv_' + Date.now(),
+                const newItem = {
+                    cafe_id: currentCafeId.value,
                     name: manageInventoryForm.value.name,
                     unit: manageInventoryForm.value.unit,
                     current_stock: 0,
                     min_stock_alert: manageInventoryForm.value.min_stock_alert,
                     icon: manageInventoryForm.value.icon || 'fa-solid fa-box'
-                });
+                };
+                const { data, error } = await supabase.from('inventory').insert(newItem).select().single();
+                if (error) { alert("Erreur: " + error.message); return; }
+                inventory.value.push(data);
             } else {
-                const idx = inventory.value.findIndex(i => i.id === manageInventoryForm.value.id);
-                if (idx !== -1) {
-                    inventory.value[idx] = { ...inventory.value[idx], ...manageInventoryForm.value };
-                }
+                const { id, name, unit, min_stock_alert, icon } = manageInventoryForm.value;
+                const { data, error } = await supabase.from('inventory').update({ name, unit, min_stock_alert, icon }).eq('id', id).select().single();
+                if (error) { alert("Erreur: " + error.message); return; }
+                const idx = inventory.value.findIndex(i => i.id === id);
+                if (idx !== -1) inventory.value[idx] = data;
             }
             showManageInventoryModal.value = false;
         };
 
-        const deleteInventoryItem = (item) => {
+        const deleteInventoryItem = async (item) => {
             const isUsed = products.value.some(p => p.recipe && p.recipe.some(r => r.id === item.id));
             if (isUsed) {
                 alert("Impossible de supprimer cet ingrédient car il est utilisé dans la recette d'un produit.");
                 return;
             }
             if (confirm(`Voulez-vous vraiment supprimer ${item.name} du stock ?`)) {
+                const { error } = await supabase.from('inventory').delete().eq('id', item.id);
+                if (error) { alert("Erreur: " + error.message); return; }
                 inventory.value = inventory.value.filter(i => i.id !== item.id);
             }
         };
@@ -1691,10 +1723,12 @@ const router = useRouter();
             repaymentModal.value.amount = cust.credit_balance;
             repaymentModal.value.show = true;
         };
-        const confirmRepayment = () => {
+        const confirmRepayment = async () => {
             if (repaymentModal.value.customer && repaymentModal.value.amount > 0) {
-                repaymentModal.value.customer.credit_balance -= repaymentModal.value.amount;
-                alert(`Paiement de ${repaymentModal.value.amount.toFixed(3)} ${cafeSettings.value.currency} enregistré pour ${repaymentModal.value.customer.full_name} !`);
+                const cust = repaymentModal.value.customer;
+                cust.credit_balance -= repaymentModal.value.amount;
+                await supabase.from('customers').update({ credit_balance: cust.credit_balance }).eq('id', cust.id);
+                alert(`Paiement de ${repaymentModal.value.amount.toFixed(3)} ${cafeSettings.value.currency} enregistré pour ${cust.full_name} !`);
                 repaymentModal.value.show = false;
             }
         };
@@ -1702,15 +1736,18 @@ const router = useRouter();
         // Add Customer Modal
         const showAddCustomerModal = ref(false);
         const newCust = ref({ full_name: '', phone: '', credit_limit: 100.0 });
-        const confirmAddCustomer = () => {
+        const confirmAddCustomer = async () => {
             if (!newCust.value.full_name) return;
-            customers.value.push({
-                id: 'c' + Date.now(),
+            const newCustomer = {
+                cafe_id: currentCafeId.value,
                 full_name: newCust.value.full_name,
                 phone: newCust.value.phone,
                 credit_balance: 0,
                 credit_limit: newCust.value.credit_limit
-            });
+            };
+            const { data, error } = await supabase.from('customers').insert(newCustomer).select().single();
+            if (error) { alert("Erreur: " + error.message); return; }
+            customers.value.push(data);
             alert(`Client ${newCust.value.full_name} ajouté !`);
             showAddCustomerModal.value = false;
             newCust.value = { full_name: '', phone: '', credit_limit: 100.0 };
@@ -1768,48 +1805,7 @@ const router = useRouter();
             }
         };
 
-        // --- Persistence Logic ---
-        const STORAGE_KEYS = {
-            expenses: 'cafe_expenses',
-            shiftClosures: 'cafe_shiftClosures',
-            inventory: 'cafe_inventory',
-            products: 'cafe_products',
-            customers: 'cafe_customers',
-            orders: 'cafe_orders'
-        };
-
-        onMounted(() => {
-            const load = (key, targetRef) => {
-                const stored = localStorage.getItem(key);
-                if (stored) {
-                    try {
-                        targetRef.value = JSON.parse(stored);
-                    } catch (e) {
-                        console.error('Error parsing localStorage key:', key, e);
-                    }
-                }
-            };
-            load(STORAGE_KEYS.expenses, expenses);
-            load(STORAGE_KEYS.shiftClosures, shiftClosures);
-            load(STORAGE_KEYS.inventory, inventory);
-            load(STORAGE_KEYS.products, products);
-            load(STORAGE_KEYS.customers, customers);
-            load(STORAGE_KEYS.orders, orders);
-
-            const save = (key, sourceRef) => {
-                watch(sourceRef, (newVal) => {
-                    localStorage.setItem(key, JSON.stringify(newVal));
-                }, { deep: true });
-            };
-            save(STORAGE_KEYS.expenses, expenses);
-            save(STORAGE_KEYS.shiftClosures, shiftClosures);
-            save(STORAGE_KEYS.inventory, inventory);
-            save(STORAGE_KEYS.products, products);
-            save(STORAGE_KEYS.customers, customers);
-            save(STORAGE_KEYS.orders, orders);
-        });
-
-</script>
+        </script>
 
 <style scoped>
 /* Scoped styles can go here if needed */
