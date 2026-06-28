@@ -72,6 +72,11 @@
                     <strong>Saisie Globale :</strong> Saisissez le total des quantités vendues durant ce service pour clôturer la caisse.
                 </div>
 
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-4 p-3">
+                    <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Date du service</label>
+                    <input v-model="bulkDate" type="date" class="w-full border border-gray-300 rounded-xl p-2 text-sm font-extrabold focus:outline-coffee-600">
+                </div>
+
                 <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-16">
                     <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
                         <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Quantités Vendues</h3>
@@ -125,12 +130,24 @@
                 <button @click="financeSubTab = 'stats'" :class="['flex-1 py-1.5 text-xs font-bold rounded-lg transition', financeSubTab === 'stats' ? 'bg-white text-coffee-700 shadow-sm' : 'text-gray-500 hover:text-gray-700']">Bénéfices</button>
             </div>
 
+            <!-- Date Filter for Finances -->
+            <div class="bg-white p-3 rounded-2xl shadow-sm border border-gray-200 grid grid-cols-2 gap-2 mb-4">
+                <div>
+                    <label class="text-[10px] font-bold text-gray-400 uppercase block mb-0.5">Du</label>
+                    <input v-model="financeStartDate" type="date" class="w-full border border-gray-300 rounded-lg p-1.5 text-xs font-bold focus:outline-coffee-600">
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold text-gray-400 uppercase block mb-0.5">Au</label>
+                    <input v-model="financeEndDate" type="date" class="w-full border border-gray-300 rounded-lg p-1.5 text-xs font-bold focus:outline-coffee-600">
+                </div>
+            </div>
+
             <!-- RECETTES SUB-TAB -->
             <div v-if="financeSubTab === 'sales'" class="space-y-4">
                 <!-- Summary Cards -->
                 <div class="grid grid-cols-2 gap-3">
                 <div class="bg-gradient-to-br from-coffee-600 to-coffee-800 text-white p-3.5 rounded-2xl shadow-md">
-                    <span class="text-xs text-coffee-100 block font-medium">Chiffre d'Affaires du Jour</span>
+                    <span class="text-xs text-coffee-100 block font-medium">Chiffre d'Affaires (Période)</span>
                     <span class="text-xl font-black mt-1 block">{{ todayRevenue.toFixed(3) }} {{ cafeSettings.currency }}</span>
                     <span class="text-[10px] text-emerald-300 font-bold mt-1 block"><i class="fa-solid fa-arrow-trend-up mr-1"></i> TVA incluse ({{ cafeSettings.taxRate }}%)</span>
                 </div>
@@ -213,7 +230,7 @@
                 <!-- Total Expenses Card -->
                 <div class="bg-gradient-to-br from-red-600 to-red-800 text-white p-3.5 rounded-2xl shadow-md flex justify-between items-center">
                     <div>
-                        <span class="text-xs text-red-100 block font-medium">Total des Sorties (Mois)</span>
+                        <span class="text-xs text-red-100 block font-medium">Total des Sorties (Période)</span>
                         <span class="text-xl font-black mt-1 block">{{ totalExpenses.toFixed(3) }} {{ cafeSettings.currency }}</span>
                     </div>
                     <i class="fa-solid fa-money-bill-transfer text-3xl text-red-300/50"></i>
@@ -228,7 +245,7 @@
                         <div v-if="expenses.length === 0" class="p-6 text-center text-gray-400 text-xs italic">
                             Aucune dépense enregistrée.
                         </div>
-                        <div v-for="exp in expenses" :key="exp.id" class="p-3.5 hover:bg-gray-50 transition flex justify-between items-center">
+                        <div v-for="exp in filteredExpenses" :key="exp.id" class="p-3.5 hover:bg-gray-50 transition flex justify-between items-center">
                             <div class="flex items-center space-x-3">
                                 <div class="w-10 h-10 bg-red-50 text-red-600 rounded-xl flex items-center justify-center text-lg">
                                     <i class="fa-solid fa-arrow-right-from-bracket"></i>
@@ -276,7 +293,7 @@
                         <div v-if="shiftClosures.length === 0" class="p-6 text-center text-gray-400 text-xs italic">
                             Aucune clôture enregistrée.
                         </div>
-                        <div v-for="shift in shiftClosures" :key="shift.id" class="p-3.5 hover:bg-gray-50 transition">
+                        <div v-for="shift in filteredShiftClosures" :key="shift.id" class="p-3.5 hover:bg-gray-50 transition cursor-pointer" @click="openShiftDetails(shift)">
                             <div class="flex justify-between items-start mb-1">
                                 <div class="flex items-center space-x-2">
                                     <span class="w-8 h-8 bg-purple-100 text-purple-700 rounded-lg flex items-center justify-center font-bold">
@@ -287,7 +304,10 @@
                                         <span class="block text-[10px] text-gray-500">{{ new Date(shift.date).toLocaleString() }} • Par {{ shift.barista_name }}</span>
                                     </div>
                                 </div>
-                                <span class="font-black text-sm text-coffee-700">{{ shift.total_revenue.toFixed(3) }} {{ cafeSettings.currency }}</span>
+                                <div class="text-right">
+                                    <span class="font-black text-sm text-coffee-700 block">{{ shift.total_revenue.toFixed(3) }} {{ cafeSettings.currency }}</span>
+                                    <span class="text-[9px] text-blue-600 font-bold uppercase underline mt-0.5">Détails <i class="fa-solid fa-chevron-right text-[8px]"></i></span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -989,6 +1009,49 @@
         </div>
     </div>
 
+    <!-- Shift Details Modal -->
+    <div v-if="shiftDetailsModal.show" class="absolute inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center z-40 p-4">
+        <div class="bg-white w-full rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+            <div class="bg-purple-700 text-white px-4 py-3 flex justify-between items-center">
+                <h3 class="font-bold text-base flex items-center"><i class="fa-solid fa-list-check mr-2 text-purple-200"></i> Détails Clôture #{{ shiftDetailsModal.shift?.id.split('_')[1] }}</h3>
+                <button @click="shiftDetailsModal.show = false" class="text-white/80 hover:text-white">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            <div class="p-4 overflow-y-auto">
+                <div class="bg-purple-50 p-3 rounded-2xl border border-purple-100 mb-4 flex justify-between items-center">
+                    <div>
+                        <span class="text-[10px] text-purple-500 font-bold block uppercase">Total Encaissé</span>
+                        <span class="text-lg font-black text-purple-900">{{ shiftDetailsModal.shift?.total_revenue.toFixed(3) }} {{ cafeSettings.currency }}</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[10px] text-purple-500 font-bold block uppercase">Date & Barista</span>
+                        <span class="text-xs font-bold text-purple-900">{{ new Date(shiftDetailsModal.shift?.date).toLocaleDateString() }} • {{ shiftDetailsModal.shift?.barista_name }}</span>
+                    </div>
+                </div>
+                
+                <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Produits Vendus</h4>
+                <div class="divide-y divide-gray-100 border border-gray-100 rounded-xl">
+                    <div v-for="item in shiftDetailsModal.shift?.details" :key="item.product.id" class="p-3 flex justify-between items-center bg-gray-50/50">
+                        <div class="flex items-center space-x-3">
+                            <span class="w-8 h-8 bg-gray-200 text-gray-600 rounded-xl flex items-center justify-center font-bold text-sm">
+                                <i :class="item.product.icon"></i>
+                            </span>
+                            <div>
+                                <span class="font-extrabold text-sm text-gray-800">{{ item.product.name }}</span>
+                                <span class="block text-[10px] text-gray-400">{{ item.product.price.toFixed(3) }} {{ cafeSettings.currency }} / unité</span>
+                            </div>
+                        </div>
+                        <span class="font-black text-base text-gray-800 bg-white px-2.5 py-1 rounded-lg border border-gray-200 shadow-sm">x{{ item.qty }}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="p-3.5 bg-gray-50 border-t border-gray-200 flex justify-end">
+                <button @click="shiftDetailsModal.show = false" class="px-5 py-2.5 bg-purple-600 text-white rounded-xl text-xs font-black hover:bg-purple-500 shadow-md shadow-purple-600/30">Fermer</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Add/Edit Inventory Item Modal -->
     <div v-if="showManageInventoryModal" class="absolute inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center z-40 p-4">
         <div class="bg-white w-full rounded-3xl shadow-2xl overflow-hidden flex flex-col">
@@ -1334,6 +1397,7 @@ const router = useRouter();
         const cart = ref([]);
 
         // Bulk Entry Mode
+        const bulkDate = ref(new Date().toISOString().slice(0, 10));
         const bulkQuantities = ref({});
         
         onMounted(() => {
@@ -1384,10 +1448,14 @@ const router = useRouter();
             }
             
             // Add shift closure record
+            const shiftDateObj = new Date(bulkDate.value);
+            const now = new Date();
+            shiftDateObj.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+            
             shiftClosures.value.unshift({
                 id: 'shift_' + Date.now(),
                 total_revenue: bulkTotalAmount.value,
-                date: new Date().toISOString(),
+                date: shiftDateObj.toISOString(),
                 barista_name: currentUser.value.name,
                 details: details
             });
@@ -1419,29 +1487,51 @@ const router = useRouter();
             return cart.value.reduce((acc, item) => acc + item.quantity, 0);
         });
 
+        // Date Filtering for Finances
+        const financeStartDate = ref(new Date().toISOString().slice(0, 10));
+        const financeEndDate = ref(new Date().toISOString().slice(0, 10));
+
+        const isDateInRange = (dateString) => {
+            if (!dateString) return false;
+            const date = new Date(dateString).toISOString().slice(0, 10);
+            return date >= financeStartDate.value && date <= financeEndDate.value;
+        };
+
         // Mock Orders History
         const orders = ref([]);
 
+        const filteredOrders = computed(() => {
+            return orders.value.filter(o => isDateInRange(o.created_at));
+        });
+
+        const filteredShiftClosures = computed(() => {
+            return shiftClosures.value.filter(s => isDateInRange(s.date));
+        });
+
+        const filteredExpenses = computed(() => {
+            return expenses.value.filter(e => isDateInRange(e.date));
+        });
+
         const sortedOrders = computed(() => {
-            return [...orders.value].reverse();
+            return [...filteredOrders.value].reverse();
         });
 
         const todayRevenue = computed(() => {
-            const posRevenue = orders.value.reduce((acc, o) => acc + o.total_amount, 0);
-            const bulkRevenue = shiftClosures.value.reduce((acc, s) => acc + s.total_revenue, 0);
+            const posRevenue = filteredOrders.value.reduce((acc, o) => acc + o.total_amount, 0);
+            const bulkRevenue = filteredShiftClosures.value.reduce((acc, s) => acc + s.total_revenue, 0);
             return posRevenue + bulkRevenue;
         });
         const totalExpenses = computed(() => {
-            return expenses.value.reduce((acc, exp) => acc + exp.amount, 0);
+            return filteredExpenses.value.reduce((acc, exp) => acc + exp.amount, 0);
         });
         const cashRevenue = computed(() => {
-            return orders.value.filter(o => o.payment_method === 'cash').reduce((acc, o) => acc + o.total_amount, 0);
+            return filteredOrders.value.filter(o => o.payment_method === 'cash').reduce((acc, o) => acc + o.total_amount, 0);
         });
         const cardRevenue = computed(() => {
-            return orders.value.filter(o => o.payment_method === 'card').reduce((acc, o) => acc + o.total_amount, 0);
+            return filteredOrders.value.filter(o => o.payment_method === 'card').reduce((acc, o) => acc + o.total_amount, 0);
         });
         const creditRevenue = computed(() => {
-            return orders.value.filter(o => o.payment_method === 'customer_credit').reduce((acc, o) => acc + o.total_amount, 0);
+            return filteredOrders.value.filter(o => o.payment_method === 'customer_credit').reduce((acc, o) => acc + o.total_amount, 0);
         });
 
         // Modals
@@ -1585,6 +1675,13 @@ const router = useRouter();
             if (confirm(`Voulez-vous vraiment supprimer ${item.name} du stock ?`)) {
                 inventory.value = inventory.value.filter(i => i.id !== item.id);
             }
+        };
+
+        // Shift Details Modal
+        const shiftDetailsModal = ref({ show: false, shift: null });
+        const openShiftDetails = (shift) => {
+            shiftDetailsModal.value.shift = shift;
+            shiftDetailsModal.value.show = true;
         };
 
         // Repayment Modal
