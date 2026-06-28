@@ -1165,6 +1165,10 @@ const currentCafeId = ref(null); // pos, sales, stock, customers, settings
              if (cafeAdmin) {
                  currentUser.value = { id: userId, name: 'Gérant (Admin)', role: 'admin' };
                  userList.value = [{ id: userId, name: 'Moi (Gérant)', role: 'admin' }];
+                 currentCafeId.value = cafeAdmin.id;
+                 cafeSettings.value.name = cafeAdmin.name;
+                 if (cafeAdmin.currency) cafeSettings.value.currency = cafeAdmin.currency;
+                 if (cafeAdmin.tax_rate) cafeSettings.value.taxRate = cafeAdmin.tax_rate;
                  
                  // Fetch baristas
                  const { data: baristas } = await supabase.from('barista_accounts').select('*').eq('cafe_id', cafeAdmin.id);
@@ -1191,17 +1195,17 @@ const currentCafeId = ref(null); // pos, sales, stock, customers, settings
                  const { data: baristaAccount } = await supabase.from('barista_accounts').select('name, cafe_id').eq('username', usernameFromEmail).single();
                  if (baristaAccount) {
                      currentUser.value = { id: userId, name: baristaAccount.name, role: 'barista' };
+                     currentCafeId.value = baristaAccount.cafe_id;
+                     const { data: cafeData } = await supabase.from('cafes').select('*').eq('id', baristaAccount.cafe_id).single();
+                     if (cafeData) {
+                         cafeSettings.value.name = cafeData.name;
+                         if (cafeData.currency) cafeSettings.value.currency = cafeData.currency;
+                         if (cafeData.tax_rate) cafeSettings.value.taxRate = cafeData.tax_rate;
+                     }
                  } else {
                      currentUser.value = { id: userId, name: isProbablyAdmin ? 'Gérant (Réparation)' : 'Barista Anonyme', role: 'barista' };
                  }
                  userList.value = [currentUser.value];
-             }
-
-             if (currentUser.value.role === 'admin') {
-                 currentCafeId.value = currentUser.value.id;
-             } else {
-                 const { data: bAcc } = await supabase.from('barista_accounts').select('cafe_id').eq('username', session.user.email.split('@')[0]).single();
-                 if (bAcc) currentCafeId.value = bAcc.cafe_id;
              }
              
              if (currentCafeId.value) {
