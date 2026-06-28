@@ -1358,6 +1358,7 @@ const currentCafeId = ref(null); // pos, sales, stock, customers, settings
                 return;
             }
             const newExp = {
+                id: 'exp_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
                 cafe_id: currentCafeId.value,
                 amount: newExpenseForm.value.amount,
                 category: newExpenseForm.value.category,
@@ -1388,6 +1389,7 @@ const currentCafeId = ref(null); // pos, sales, stock, customers, settings
             const recipeSummary = summaryParts.join(' + ') || 'Sans recette liée';
 
             const newProd = {
+                id: 'prod_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
                 cafe_id: currentCafeId.value,
                 name: newProdForm.value.name,
                 price: newProdForm.value.price,
@@ -1479,6 +1481,7 @@ const currentCafeId = ref(null); // pos, sales, stock, customers, settings
             shiftDateObj.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
             
             const newShift = {
+                id: 'shift_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
                 cafe_id: currentCafeId.value,
                 total_revenue: bulkTotalAmount.value,
                 date: shiftDateObj.toISOString(),
@@ -1611,6 +1614,7 @@ const currentCafeId = ref(null); // pos, sales, stock, customers, settings
             }
 
             const newOrder = {
+                id: 'ord_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
                 cafe_id: currentCafeId.value,
                 order_number: 100 + orders.value.length + 1,
                 barista_name: currentUser.value.name,
@@ -1680,6 +1684,7 @@ const currentCafeId = ref(null); // pos, sales, stock, customers, settings
             
             if (manageInventoryMode.value === 'add') {
                 const newItem = {
+                    id: 'inv_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
                     cafe_id: currentCafeId.value,
                     name: manageInventoryForm.value.name,
                     unit: manageInventoryForm.value.unit,
@@ -1743,6 +1748,7 @@ const currentCafeId = ref(null); // pos, sales, stock, customers, settings
         const confirmAddCustomer = async () => {
             if (!newCust.value.full_name) return;
             const newCustomer = {
+                id: 'cust_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
                 cafe_id: currentCafeId.value,
                 full_name: newCust.value.full_name,
                 phone: newCust.value.phone,
