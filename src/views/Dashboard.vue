@@ -1122,7 +1122,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { supabase } from '../supabase';
 import { createClient } from '@supabase/supabase-js';
@@ -1768,6 +1768,46 @@ const router = useRouter();
             }
         };
 
+        // --- Persistence Logic ---
+        const STORAGE_KEYS = {
+            expenses: 'cafe_expenses',
+            shiftClosures: 'cafe_shiftClosures',
+            inventory: 'cafe_inventory',
+            products: 'cafe_products',
+            customers: 'cafe_customers',
+            orders: 'cafe_orders'
+        };
+
+        onMounted(() => {
+            const load = (key, targetRef) => {
+                const stored = localStorage.getItem(key);
+                if (stored) {
+                    try {
+                        targetRef.value = JSON.parse(stored);
+                    } catch (e) {
+                        console.error('Error parsing localStorage key:', key, e);
+                    }
+                }
+            };
+            load(STORAGE_KEYS.expenses, expenses);
+            load(STORAGE_KEYS.shiftClosures, shiftClosures);
+            load(STORAGE_KEYS.inventory, inventory);
+            load(STORAGE_KEYS.products, products);
+            load(STORAGE_KEYS.customers, customers);
+            load(STORAGE_KEYS.orders, orders);
+
+            const save = (key, sourceRef) => {
+                watch(sourceRef, (newVal) => {
+                    localStorage.setItem(key, JSON.stringify(newVal));
+                }, { deep: true });
+            };
+            save(STORAGE_KEYS.expenses, expenses);
+            save(STORAGE_KEYS.shiftClosures, shiftClosures);
+            save(STORAGE_KEYS.inventory, inventory);
+            save(STORAGE_KEYS.products, products);
+            save(STORAGE_KEYS.customers, customers);
+            save(STORAGE_KEYS.orders, orders);
+        });
 
 </script>
 
